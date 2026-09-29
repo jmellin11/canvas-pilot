@@ -42,7 +42,8 @@ PREAMBLE = f"""{GENERATED_MARKER}
 # Ordered: specific passages first, then generic wording.
 REWRITES: list[tuple[str, str]] = [
     (
-        r"Keep `\.claude/` read-only\..*?Do not write `\.claude`\.",
+        r"Keep `\.claude/` read-only\. It may be inspected as frozen behavioral history"
+        r"[^`]*?Do not write `\.claude`\.",
         "Write the tracked skill under `.claude/skills/` (the Claude Code driver's\n"
         "skill directory). No content from private legacy playbooks may be copied\n"
         "into the public skill.",

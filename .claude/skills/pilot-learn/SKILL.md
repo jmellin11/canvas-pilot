@@ -59,18 +59,24 @@ scored, and what professors wrote back.
 ## Source #2: school email (Outlook, via the Microsoft 365 connector)
 
 Canvas locks old courses, but its notification emails don't expire. Use
-`outlook_email_search` to find:
-- Canvas notifications about graded work and submission comments, which carry
-  professor feedback from past terms. Add those to the feedback themes.
+`outlook_email_search` (sender `instructure.com`) to find:
+- "Assignment Graded" and "Submission Posted" notifications. They include the
+  score ("score: 23.0 out of 25.0"), so they can rebuild per-assignment scores
+  for locked courses. "Submission Comment" digests only say a comment exists
+  ("Click to view"), without the text.
 - Emails from professors and TAs about current courses (extensions,
-  clarifications, announcements). Add them to `current.md`.
+  clarifications, announcements, events). Add them to `current.md`.
 
 Summarize, don't copy. Skip anything personal or unrelated to school.
 
 ## Source #3: Word documents (OneDrive, via the Microsoft 365 connector)
 
-Use `sharepoint_search` / `sharepoint_folder_search` to list the student's
-Word documents, and `read_resource` to open a few. Drafts that never made it
+`sharepoint_search` covers the whole school tenant, including other
+students' shared team sites. Keep only results whose `webUrl` sits under the
+student's own `/personal/<user>/` OneDrive, or list that drive directly with
+`read_resource` on `drive:///users/me` and then its root `file:///<driveId>/`.
+Open a few documents with `read_resource`. OneDrive often keeps both an AI first
+draft and the student's rewrite, which shows how they revise. Drafts that never made it
 to Canvas still show their voice. Add those findings to `voice.md` and note
 which OneDrive folders hold class work in `profile.md`.
 

@@ -23,6 +23,23 @@ from _lib import (
 )
 
 
+# Gitignored homes for the student's own data; private markers belong there.
+PRIVATE_STORES = ("context", "_private")
+PRIVATE_FILES = {"SECRETS.md"}
+
+
+def _writes_private_store(tool_input: dict) -> bool:
+    raw = tool_input.get("file_path") or tool_input.get("path")
+    if not isinstance(raw, str) or not raw:
+        return False
+    path = Path(raw) if Path(raw).is_absolute() else ROOT / raw
+    try:
+        rel = path.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        return False
+    return rel.parts[:1] in {(store,) for store in PRIVATE_STORES} or rel.as_posix() in PRIVATE_FILES
+
+
 def referenced_result_paths(event: dict) -> list[Path]:
     tool_input = event.get("tool_input") or {}
     candidates: list[str] = []
@@ -144,7 +161,7 @@ def main() -> None:
 
     text = ""
     tool_input = event.get("tool_input")
-    if isinstance(tool_input, dict):
+    if isinstance(tool_input, dict) and not _writes_private_store(tool_input):
         text = str(tool_input.get("command") or tool_input.get("content") or "")
     if text and contains_private_marker(text):
         block_post(

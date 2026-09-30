@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
+import datetime as dt
 import json
+import os
 import re
 
 from _lib import ROOT, read_event, safe_main, today_dir
@@ -50,6 +52,42 @@ def _routes_nonempty(yaml_path) -> bool:
     return False
 
 
+def _export_claude_env() -> None:
+    """Put the project venv first on PATH for later Claude Bash calls, so the
+    skills' bare `python -m ...` resolves on machines without `python`."""
+    env_file = os.environ.get("CLAUDE_ENV_FILE")
+    venv_bin = ROOT / ".venv" / "bin"
+    if not env_file or not venv_bin.is_dir():
+        return
+    with open(env_file, "a", encoding="utf-8") as f:
+        f.write(f'export PATH="{venv_bin}:$PATH"\n')
+        f.write("export CANVAS_ENFORCE_MUTATION_AUTH=1\n")
+
+
+def _copilot_status() -> list[str]:
+    """Claude Code runs Canvas Pilot as a context-first copilot (CLAUDE.md):
+    report what context exists instead of steering into the route pipeline."""
+    parts = [
+        "Canvas Pilot copilot: load context/ per CLAUDE.md before answering. "
+        "Canvas mutations require a signed receipt from canvas-submit; "
+        "run Python as `.venv/bin/python`.",
+    ]
+    if not _env_has_canvas_base(ROOT / ".env"):
+        parts.insert(0, "SETUP NOT READY: Canvas connection isn't configured. On the student's "
+                        "next message, dispatch `pilot-setup` (it hands the mechanical part to "
+                        "`canvas-setup`). If their first message is off-topic, answer it first.")
+    context = ROOT / "context"
+    if not (context / "profile.md").exists():
+        parts.append("No context/profile.md yet: offer `pilot-setup`.")
+    playbook = context / "playbook.md"
+    if playbook.exists():
+        learned = dt.date.fromtimestamp(playbook.stat().st_mtime).isoformat()
+        parts.append(f"Context learned {learned} (context/playbook.md).")
+    else:
+        parts.append("No context/playbook.md yet: offer `pilot-learn`.")
+    return parts
+
+
 @safe_main
 def main() -> None:
     read_event()
@@ -58,11 +96,21 @@ def main() -> None:
     plan = today / "plan.json"
     ledger = ROOT / "runs" / "_processed.json"
 
-    parts = [
-        "Codex primary driver active.",
-        "Preserve scan -> approval -> execute boundaries.",
-        "Do not modify .claude/ unless explicitly asked.",
-    ]
+    if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE_SESSION_ID"):
+        _export_claude_env()
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": "\n".join(_copilot_status()),
+            }
+        }, ensure_ascii=False))
+        return
+    else:
+        parts = [
+            "Codex primary driver active.",
+            "Preserve scan -> approval -> execute boundaries.",
+            "Do not modify .claude/ unless explicitly asked.",
+        ]
 
     # Setup-state detection (ported from .claude/hooks/check-setup-done.py):
     # nudge dispatching canvas-setup when unconfigured; stay quiet once ready so

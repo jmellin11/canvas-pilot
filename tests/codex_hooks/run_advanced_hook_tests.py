@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
+import datetime as dt
 import json
 import shutil
 import subprocess
@@ -9,6 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOKS = ROOT / ".codex" / "hooks"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from src.run_state import plan_digest, stable_work_dir  # noqa: E402
 
 
 def run_hook(script: str, event: dict, *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -156,25 +160,55 @@ def test_normal_run_artifact_allowed() -> None:
     assert cp.stdout.strip() == ""
 
 
-def test_stop_marker_other_session_passes() -> None:
+def setup_session_run(session_id: str) -> Path:
+    """A valid in-progress execute run owned by `session_id` whose one approved
+    assignment has no result.json yet. stop_guard validates the plan and
+    marker before it looks at ownership, so the fixture must be complete."""
     today = ROOT / "runs" / "adv_session"
     today.mkdir(parents=True, exist_ok=True)
-    marker = today / ".scan_in_progress"
-    old_env_date = "adv_session"
-    marker.write_text(json.dumps({"session_id": "other-session"}), encoding="utf-8")
+    now = dt.datetime.now(dt.timezone.utc)
+    plan = {
+        "generated_at": (now - dt.timedelta(minutes=1)).isoformat(),
+        "expires_at": (now + dt.timedelta(hours=1)).isoformat(),
+        "items": [{
+            "index": 1,
+            "course_id": 1,
+            "assignment_id": 2,
+            "name": "Missing Result",
+            "proposed_skill": "canvas-skip",
+            "user_decision": "approve",
+        }],
+    }
+    (today / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
     (today / "assignments.json").write_text(json.dumps([{
         "course_id": 1,
         "assignment_id": 2,
         "course_name": "Test Course",
         "name": "Missing Result",
+        "skill": "canvas-skip",
+        "work_dir": stable_work_dir(today, 1, 2).name,
     }]), encoding="utf-8")
+    (today / ".scan_in_progress").write_text(json.dumps({
+        "session_id": session_id,
+        "owner_kind": "codex",
+        "created_at": now.isoformat(),
+        "plan_digest": plan_digest(plan),
+        "results_prepared_at": now.isoformat(),
+        "results_archive_count": 0,
+        "prepared_approved_result_keys": [stable_work_dir(today, 1, 2).name],
+    }), encoding="utf-8")
+    return today
+
+
+def test_stop_marker_other_session_passes() -> None:
+    today = setup_session_run("other-session")
     try:
         cp = run_hook(
             "stop_guard.py",
             {"hook_event_name": "Stop", "stop_hook_active": False},
             env={
                 "CODEX_HOOK_SKIP_BATCH": "1",
-                "CODEX_TEST_DATE": old_env_date,
+                "CODEX_TEST_DATE": "adv_session",
                 "CODEX_SESSION_ID": "current-session",
             },
         )
@@ -185,15 +219,7 @@ def test_stop_marker_other_session_passes() -> None:
 
 
 def test_stop_marker_matching_session_blocks() -> None:
-    today = ROOT / "runs" / "adv_session"
-    today.mkdir(parents=True, exist_ok=True)
-    (today / ".scan_in_progress").write_text(json.dumps({"session_id": "current-session"}), encoding="utf-8")
-    (today / "assignments.json").write_text(json.dumps([{
-        "course_id": 1,
-        "assignment_id": 2,
-        "course_name": "Test Course",
-        "name": "Missing Result",
-    }]), encoding="utf-8")
+    today = setup_session_run("current-session")
     try:
         cp = run_hook(
             "stop_guard.py",

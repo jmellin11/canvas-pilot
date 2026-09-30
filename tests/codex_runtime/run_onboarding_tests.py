@@ -19,7 +19,7 @@ def assert_pattern(text: str, pattern: str, label: str) -> None:
 
 def test_agent_guided_auth_path() -> None:
     text = read_doc()
-    assert_pattern(text, r"canvas-pilot\.likelyou\.com/zh/install", "install prompt")
+    assert_pattern(text, r"canvas-pilot-rho\.vercel\.app/install", "install prompt")
     assert_pattern(text, r"canvas-setup", "setup skill")
     assert_pattern(text, r"Canvas 浏览器", "browser login")
     assert_pattern(text, r"密码、2FA、cookie 不粘贴到聊天或终端", "secret boundary")

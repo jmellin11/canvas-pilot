@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import re
@@ -63,6 +64,30 @@ def _export_claude_env() -> None:
         f.write("export CANVAS_ENFORCE_MUTATION_AUTH=1\n")
 
 
+def _copilot_status() -> list[str]:
+    """Claude Code runs Canvas Pilot as a context-first copilot (CLAUDE.md):
+    report what context exists instead of steering into the route pipeline."""
+    parts = [
+        "Canvas Pilot copilot: load context/ per CLAUDE.md before answering. "
+        "Canvas mutations require a signed receipt from canvas-submit; "
+        "run Python as `.venv/bin/python`.",
+    ]
+    if not _env_has_canvas_base(ROOT / ".env"):
+        parts.insert(0, "SETUP NOT READY: Canvas connection isn't configured. On the student's "
+                        "next message, dispatch `pilot-setup` (it hands the mechanical part to "
+                        "`canvas-setup`). If their first message is off-topic, answer it first.")
+    context = ROOT / "context"
+    if not (context / "profile.md").exists():
+        parts.append("No context/profile.md yet: offer `pilot-setup`.")
+    playbook = context / "playbook.md"
+    if playbook.exists():
+        learned = dt.date.fromtimestamp(playbook.stat().st_mtime).isoformat()
+        parts.append(f"Context learned {learned} (context/playbook.md).")
+    else:
+        parts.append("No context/playbook.md yet: offer `pilot-learn`.")
+    return parts
+
+
 @safe_main
 def main() -> None:
     read_event()
@@ -73,12 +98,13 @@ def main() -> None:
 
     if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE_SESSION_ID"):
         _export_claude_env()
-        parts = [
-            "Claude Code driver active (skills in .claude/skills are synced from .agents/skills).",
-            "Preserve scan -> approval -> execute boundaries.",
-            "Canvas mutations require a signed receipt from canvas-submit; "
-            "run Python as `.venv/bin/python`.",
-        ]
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": "\n".join(_copilot_status()),
+            }
+        }, ensure_ascii=False))
+        return
     else:
         parts = [
             "Codex primary driver active.",

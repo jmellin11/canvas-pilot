@@ -116,3 +116,7 @@ CLAUDE.local.md
 ?.??.md
 ??.?.md
 ??.??.md
+
+# Copilot knowledge base — the student's profile, learned notes, and the raw
+# Canvas history archive (grades, submitted files). Local-only, never commit.
+context/
